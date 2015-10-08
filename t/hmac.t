@@ -1,14 +1,17 @@
 # vi:ft=
 
 use Test::Nginx::Socket::Lua;
+use Cwd qw(cwd);
 
 repeat_each(2);
 
 plan tests => repeat_each() * (3 * blocks());
 
-our $HttpConfig = <<'_EOC_';
-    lua_package_path 'lib/?.lua;;';
-    lua_package_cpath 'lib/?.so;;';
+my $pwd = cwd();
+
+our $HttpConfig = <<_EOC_;
+    lua_package_path  "$pwd/lib/?.lua;../lua-resty-string/lib/?.lua;;";
+    lua_package_cpath "$pwd/lib/?.so;;";
 _EOC_
 
 no_long_string();
@@ -230,5 +233,45 @@ GET /t
 --- response_body
 true
 hmac-md5: 80f9a1bc99575c2430fe04c982cf5700
+--- no_error_log
+[error]
+
+
+
+=== TEST 10: Wrapper function: sha1 and sha256
+--- http_config eval: $::HttpConfig
+--- config
+    location /t {
+        content_by_lua '
+            local hmac = require "resty.hmac"
+            local str = require "resty.string"
+            local hmac_sha256 = hmac:new("~@!$%^_", hmac.ALGOS.SHA256)
+            hmac_sha256:update("hello, ")
+            hmac_sha256:update("world")
+            ngx.say("hmac-sha256: ", hmac_sha256:final("!", true))
+
+            -- test our wrapper functions
+            sha1 = hmac:sha1("secret_key", "hello")
+            sha256 = hmac:sha256("~@!$%^_", "hello, world!")
+            ngx.say("hmac:sha1: ", str.to_hex(sha1))
+            ngx.say("ngx.hmac_sha1: ", str.to_hex(ngx.hmac_sha1("secret_key", "hello")))
+            ngx.say("hmac:sha256: ", str.to_hex(sha256))
+
+            -- ensure the result matches with ngx.hmac_sha1
+            ngx.say(hmac:sha1("secret", "foo") ==
+                    ngx.hmac_sha1("secret", "foo"))
+            ngx.say(hmac:sha1("!@#$%^", "hello foo bar!@#$") ==
+                    ngx.hmac_sha1("!@#$%^", "hello foo bar!@#$"))
+        ';
+    }
+--- request
+GET /t
+--- response_body
+hmac-sha256: a9e4d61409ac1aceaa0fd825df76d664461bbdb93bb6fea65a285cd9240c4a1b
+hmac:sha1: aee4b890b574ea8fa4f6a66aed96c3e590e5925a
+ngx.hmac_sha1: aee4b890b574ea8fa4f6a66aed96c3e590e5925a
+hmac:sha256: a9e4d61409ac1aceaa0fd825df76d664461bbdb93bb6fea65a285cd9240c4a1b
+true
+true
 --- no_error_log
 [error]

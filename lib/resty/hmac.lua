@@ -132,4 +132,16 @@ function _M.reset(self)
     return C.HMAC_Init_ex(self._ctx, nil, 0, nil, nil) == 1
 end
 
+-- wrapper functions to keep consistent with ngx.hmac_sha1
+function _M.sha1(self, secret_key, str)
+   local hmac_sha1 = _M:new(secret_key, hashes.SHA1)
+   return hmac_sha1:final(str, false)
+end
+
+function _M.sha256(self, secret_key, str)
+   local hmac_sha256 = _M:new(secret_key, hashes.SHA256)
+   return hmac_sha256:final(str, false)
+end
+
+
 return _M
